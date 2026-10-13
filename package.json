@@ -1,0 +1,35 @@
+{
+  "name": "@podby/cli",
+  "version": "0.1.0",
+  "description": "Deploy static sites and pods to PodBy",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/podby/cli.git"
+  },
+  "bin": {
+    "podby": "dist/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "test": "node --test src/*_test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "oxfmt": "0.72.0",
+    "oxlint": "1.87.0",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=24.21.0"
+  }
+}

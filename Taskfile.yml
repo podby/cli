@@ -1,0 +1,34 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - npm ci
+
+  format:
+    desc: Format TypeScript
+    cmds:
+      - ./node_modules/.bin/oxfmt
+
+  typecheck:
+    cmds:
+      - ./node_modules/.bin/tsc --noEmit
+
+  test:
+    cmds:
+      - ./node_modules/.bin/oxfmt --check
+      - ./node_modules/.bin/oxlint
+      - task: typecheck
+      - node --test src/*_test.ts
+
+  build:
+    desc: Compile to dist
+    cmds:
+      - npm run build
+
+  publish:
+    desc: Test, build, and publish to npm
+    cmds:
+      - task: test
+      - task: build
+      - npm publish
