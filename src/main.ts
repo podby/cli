@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { zipDirectory } from './archive.ts';
+
 import { clearScreenDown, cursorTo, moveCursor } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
@@ -143,16 +145,6 @@ async function login(): Promise<void> {
       process.exit(1);
     }
   }
-}
-
-async function zipDirectory(directory: string): Promise<Buffer> {
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'podby-zip-'));
-  const zipPath = path.join(tempDirectory, 'site.zip');
-  await execFileAsync('zip', ['-r', '-q', zipPath, '.', '-x', '*.git*'], { cwd: directory });
-  const bytes = await readFile(zipPath);
-  await rm(tempDirectory, { recursive: true, force: true });
-
-  return bytes;
 }
 
 async function tarBuildContext(directory: string): Promise<Buffer> {

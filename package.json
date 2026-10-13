@@ -1,6 +1,6 @@
 {
   "name": "@podby/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Deploy static sites and pods to PodBy",
   "repository": {
     "type": "git",

@@ -153,6 +153,9 @@ export function deployFailure(payload: { error?: string; payPath?: string }, ori
     return `${payload.error ?? 'Deploy failed'} ${origin}${payload.payPath}`;
   }
 
+  if (payload.error === 'name_in_use') return 'That name is already reserved on this server. Choose another name.';
+  if (payload.error === 'upload_busy') return 'Another upload is being processed. Try again in a few seconds.';
+
   if (payload.error === 'invalid_image') {
     return 'That is not an image reference. Use one like ghcr.io/you/app:1.2.3.';
   }
