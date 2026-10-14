@@ -12,6 +12,7 @@ import {
   loginFailure,
   parseArgs,
   registryLogin,
+  usageTable,
 } from './cli.ts';
 
 test('a missing append base explains how to recover', () => {
@@ -32,7 +33,9 @@ test('credentials live in the user config directory', () => {
 
 test('commands are explicit', () => {
   assert.deepEqual(parseArgs(['login']), { command: 'login' });
-  assert.deepEqual(parseArgs(['stats']), { command: 'stats' });
+  assert.deepEqual(parseArgs(['stats']), { command: 'stats', json: false });
+  assert.deepEqual(parseArgs(['stats', '--json']), { command: 'stats', json: true });
+  assert.deepEqual(parseArgs(['stats', '--yaml']), { command: 'help' });
   assert.deepEqual(parseArgs(['deploy', '--static', 'docs']), {
     command: 'deploy',
     deployKind: 'static',
@@ -167,4 +170,50 @@ test('login errors read as sentences', () => {
     'No account uses that email. Sign up at https://app.podby.com/signup first.',
   );
   assert.equal(loginFailure('something_new', 'https://app.podby.com'), 'something_new');
+});
+
+test('stats print used of total per static pod and pod', () => {
+  const table = usageTable(
+    {
+      sites: [
+        { name: 'blog', usage: {}, diskBytes: 3_000, egressBytes: 4_000 },
+        { name: 'docs', usage: {}, diskBytes: 1_500_000, egressBytes: 2_000_000 },
+        { name: 'docs', usage: null, diskBytes: 7_000, egressBytes: 0 },
+      ],
+      staticPods: [
+        { sites: ['docs'], diskBytes: 1_500_000, diskLimitBytes: 1e9, egressBytes: 2_000_000, egressLimitBytes: 1e11 },
+        { sites: ['docs', 'blog'], diskBytes: 10_000, diskLimitBytes: 1e9, egressBytes: 4_000, egressLimitBytes: 1e11 },
+      ],
+      pods: [{ name: 'api', diskBytes: null, diskLimitBytes: 1e10, egressBytes: 9e10, egressLimitBytes: 1e11 }],
+    },
+    false,
+  );
+
+  assert.match(table, /Static sites \(1\)\s+1\.5 MB of 1\.0 GB  0%\s+2\.0 MB of 100 GB  0%/);
+  assert.match(table, /  docs\s+1\.5 MB\s+2\.0 MB/);
+  assert.match(table, /  docs\s+7\.0 KB\s+No data yet/);
+  assert.match(table, /  blog\s+3\.0 KB\s+4\.0 KB/);
+  assert.match(table, /Pod api\s+No data yet\s+90\.0 GB of 100 GB  90%/);
+  assert.match(table, /at 80% or more/);
+  // oxlint-disable-next-line no-control-regex -- matching ANSI colour codes
+  assert.doesNotMatch(table, /\x1b/);
+});
+
+test('stats without anything deployed say so', () => {
+  assert.equal(usageTable({ sites: [], staticPods: [], pods: [] }, false), 'No static sites or pods yet.');
+});
+
+test('stats only colour cells at the warning threshold, which never rounds up', () => {
+  const table = usageTable(
+    {
+      pods: [{ name: 'api', diskBytes: 8e9, diskLimitBytes: 1e10, egressBytes: 7.96e10, egressLimitBytes: 1e11 }],
+    },
+    true,
+  );
+
+  // oxlint-disable-next-line no-control-regex -- matching ANSI colour codes
+  assert.match(table, /\x1b\[33m8\.0 GB of 10\.0 GB  80%\s*\x1b\[0m/);
+  assert.match(table, /79\.6 GB of 100 GB  79%$/m);
+  // oxlint-disable-next-line no-control-regex -- matching ANSI colour codes
+  assert.equal(table.match(/\x1b\[33m/g)?.length, 1);
 });

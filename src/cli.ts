@@ -8,7 +8,7 @@ export const USAGE = [
   '  podby login',
   '  podby deploy --static <name> [--append] [--no-wait | --timeout <seconds>]',
   '  podby deploy --pod <name> [--image <reference>] [--no-wait | --timeout <seconds>]',
-  '  podby stats',
+  '  podby stats [--json]',
 ].join('\n');
 
 export const DEFAULT_TIMEOUT_SECONDS = 300;
@@ -23,7 +23,7 @@ export function credentialsPath(home: string = homedir()): string {
 
 export type ParsedCommand =
   | { command: 'login' }
-  | { command: 'stats' }
+  | { command: 'stats'; json: boolean }
   | {
       command: 'deploy';
       deployKind: 'static' | 'pod';
@@ -95,8 +95,8 @@ export function parseArgs(argv: string[]): ParsedCommand {
     return { command: 'login' };
   }
 
-  if (command === 'stats' && rest.length === 0) {
-    return { command: 'stats' };
+  if (command === 'stats' && (rest.length === 0 || (rest.length === 1 && rest[0] === '--json'))) {
+    return { command: 'stats', json: rest.length === 1 };
   }
 
   return command === 'deploy' ? parseDeploy(rest) : { command: 'help' };
@@ -197,4 +197,117 @@ export function loginFailure(error: string | undefined, origin: string): string 
   }
 
   return error || 'Login failed';
+}
+
+const NEAR_LIMIT = 0.8;
+
+export type UsagePayload = {
+  sites?: Array<{ name: string; usage: object | null; diskBytes: number; egressBytes: number }>;
+  pods?: Array<{
+    name: string;
+    diskBytes: number | null;
+    diskLimitBytes: number;
+    egressBytes: number;
+    egressLimitBytes: number;
+  }>;
+  staticPods?: Array<{
+    sites: string[];
+    diskBytes: number;
+    diskLimitBytes: number;
+    egressBytes: number;
+    egressLimitBytes: number;
+  }>;
+};
+
+function formatBytes(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unit = 0;
+
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000;
+    unit += 1;
+  }
+
+  return `${unit === 0 ? value : value.toFixed(value >= 100 ? 0 : 1)} ${units[unit]}`;
+}
+
+// A zero limit means any use is over it.
+function meterShare(used: number, limit: number): number {
+  if (limit > 0) {
+    return used / limit;
+  }
+
+  return used > 0 ? 1 : 0;
+}
+
+type UsageCell = { text: string; near: boolean };
+
+function meterCell(used: number | null, limit: number): UsageCell {
+  if (used === null) {
+    return { text: 'No data yet', near: false };
+  }
+
+  const share = meterShare(used, limit);
+
+  return {
+    text: `${formatBytes(used)} of ${formatBytes(limit)}  ${Math.floor(share * 100)}%`,
+    near: share >= NEAR_LIMIT,
+  };
+}
+
+export function usageTable(payload: UsagePayload, color: boolean): string {
+  // Site names repeat across servers, so each listed name takes the first unused site with that name.
+  const unmatchedSites = [...(payload.sites ?? [])];
+  const rows: UsageCell[][] = [];
+
+  for (const staticPod of payload.staticPods ?? []) {
+    rows.push([
+      { text: `Static sites (${staticPod.sites.length})`, near: false },
+      meterCell(staticPod.diskBytes, staticPod.diskLimitBytes),
+      meterCell(staticPod.egressBytes, staticPod.egressLimitBytes),
+    ]);
+
+    for (const name of staticPod.sites) {
+      const siteIndex = unmatchedSites.findIndex((site) => site.name === name);
+      const site = siteIndex === -1 ? undefined : unmatchedSites.splice(siteIndex, 1)[0];
+      const egress = !site ? '' : site.usage ? formatBytes(site.egressBytes) : 'No data yet';
+
+      rows.push([
+        { text: `  ${name}`, near: false },
+        { text: site ? formatBytes(site.diskBytes) : '', near: false },
+        { text: egress, near: false },
+      ]);
+    }
+  }
+
+  for (const pod of payload.pods ?? []) {
+    rows.push([
+      { text: `Pod ${pod.name}`, near: false },
+      meterCell(pod.diskBytes, pod.diskLimitBytes),
+      meterCell(pod.egressBytes, pod.egressLimitBytes),
+    ]);
+  }
+
+  if (rows.length === 0) {
+    return 'No static sites or pods yet.';
+  }
+
+  const header = ['', 'Disk', 'Egress this month'].map((text) => ({ text, near: false }));
+  const widths = header.map((_, column) => Math.max(...[header, ...rows].map((row) => row[column].text.length)));
+  const line = (row: UsageCell[]) =>
+    row
+      .map((cell, column) => {
+        const padded = cell.text.padEnd(widths[column]);
+        return cell.near && color ? `\x1b[33m${padded}\x1b[0m` : padded;
+      })
+      .join('   ')
+      .trimEnd();
+  const lines = [line(header), widths.map((width) => '─'.repeat(width)).join('   '), ...rows.map(line)];
+
+  if (rows.some((row) => row.some((cell) => cell.near))) {
+    lines.push('', `Some usage is at ${Math.round(NEAR_LIMIT * 100)}% or more of its allowance.`);
+  }
+
+  return lines.join('\n');
 }

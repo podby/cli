@@ -26,7 +26,9 @@ import {
   parseArgs,
   registryLogin,
   USAGE,
+  usageTable,
   type DeployStatus,
+  type UsagePayload,
 } from './cli.ts';
 
 const execFileAsync = promisify(execFile);
@@ -331,16 +333,16 @@ async function deploy(
   });
 }
 
-async function stats(): Promise<void> {
+async function stats(json: boolean): Promise<void> {
   const response = await api('/api/v1/usage');
-  const payload = await readPayload(response);
+  const payload = await readPayload<UsagePayload>(response);
 
   if (!response.ok) {
     console.error(deployFailure(payload, apiOrigin()));
     process.exit(1);
   }
 
-  console.log(JSON.stringify(payload, null, 2));
+  console.log(json ? JSON.stringify(payload, null, 2) : usageTable(payload, stdout.isTTY && !process.env.NO_COLOR));
 }
 
 const parsed = parseArgs(process.argv.slice(2));
@@ -351,7 +353,7 @@ try {
   } else if (parsed.command === 'deploy') {
     await deploy(parsed.deployKind, parsed.name, parsed);
   } else if (parsed.command === 'stats') {
-    await stats();
+    await stats(parsed.json);
   } else {
     console.error(USAGE);
     process.exit(1);
