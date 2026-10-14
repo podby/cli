@@ -14,6 +14,13 @@ import {
   registryLogin,
 } from './cli.ts';
 
+test('a missing append base explains how to recover', () => {
+  assert.match(
+    deployFailure({ error: 'append_base_unavailable' }, 'https://app.podby.com'),
+    /without --append and wait for success/,
+  );
+});
+
 test('the API origin defaults to production and drops a trailing slash', () => {
   assert.equal(apiOrigin({}), 'https://app.podby.com');
   assert.equal(apiOrigin({ PODBY_API_ORIGIN: 'http://127.0.0.1:3001/' }), 'http://127.0.0.1:3001');

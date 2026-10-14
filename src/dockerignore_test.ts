@@ -6,6 +6,31 @@ import test from 'node:test';
 
 import { isIgnored, parseDockerignore, splitBuildContext } from './dockerignore.ts';
 
+test('Dockerfile.dockerignore takes precedence, including when it is empty', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'podby-specific-ignore-'));
+  try {
+    await mkdir(path.join(root, 'src'));
+    await writeFile(path.join(root, 'src/app.ts'), 'app');
+    await writeFile(path.join(root, 'Dockerfile'), 'FROM scratch');
+    await writeFile(path.join(root, '.env'), 'secret');
+    await writeFile(path.join(root, '.dockerignore'), 'src\n');
+    await writeFile(path.join(root, 'Dockerfile.dockerignore'), '.env\nDockerfile.dockerignore\nDockerfile\n');
+    const context = await splitBuildContext(root);
+    assert.deepEqual(context.ignored, ['.env']);
+    assert.deepEqual(context.kept.sort(), [
+      '.dockerignore',
+      'Dockerfile',
+      'Dockerfile.dockerignore',
+      'src',
+      'src/app.ts',
+    ]);
+    await writeFile(path.join(root, 'Dockerfile.dockerignore'), '');
+    assert.deepEqual((await splitBuildContext(root)).ignored, []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('dockerignore patterns follow Docker matching, last match wins', () => {
   const patterns = parseDockerignore(
     ['# comment', 'node_modules', '/docs/drafts/', '**/*.tmp', 'logs/*.log', '!logs/keep.log', '*.txt'].join('\n'),

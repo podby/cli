@@ -16,7 +16,11 @@ podby stats
 
 `--static` preserves relative symlinks within the selected directory and rejects links outside it. `.git` directories are excluded. `--static` replaces the site's files. `--append` keeps the files already online and adds or overwrites the new ones. A deploy prints its dashboard link and its status until it ends; stopping the command does not stop the deploy. It stops watching after 5 minutes; `--timeout <seconds>` changes the status-watching deadline, including stalled network requests, and `--no-wait` exits after the upload.
 
-`--pod` uploads the current directory, which needs a `Dockerfile` at its root, and PodBy builds it. `.git` and whatever `.dockerignore` excludes are left out of the upload. `--image` deploys an image built elsewhere instead; it must have a `linux/amd64` variant. For a private registry, set `PODBY_REGISTRY_USERNAME` and `PODBY_REGISTRY_PASSWORD` (a read-only token is enough); PodBy saves the login for later deploys of that pod. Uploads are scanned with ClamAV before they go live, and a deploy with a flagged file fails with the file names.
+`--pod` uploads the current directory, which needs a `Dockerfile` at its root, and PodBy builds it. `.git` and whatever the ignore file excludes are left out of the upload. `Dockerfile.dockerignore` takes precedence over `.dockerignore` when present. `--image` deploys an image built elsewhere instead; it must have a `linux/amd64` variant. For a private registry, set `PODBY_REGISTRY_USERNAME` and `PODBY_REGISTRY_PASSWORD` (a read-only token is enough); PodBy saves the login for later deploys of that pod. Uploads are scanned with ClamAV before they go live, and a deploy with a flagged file fails with the file names.
+
+Pod files written outside mounted volumes are ephemeral and disappear when the container is replaced. Configure persistent volume mount paths in the pod dashboard. Both app versions share those volumes during a blue/green deployment, so the app must support concurrent access.
+
+Static append uploads use the last successful deployment. If it is unavailable, deploy once without `--append` and wait for success before appending again.
 
 ## Development
 

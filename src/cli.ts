@@ -155,6 +155,8 @@ export function deployFailure(payload: { error?: string; payPath?: string }, ori
 
   if (payload.error === 'name_in_use') return 'That name is already reserved on this server. Choose another name.';
   if (payload.error === 'upload_busy') return 'Another upload is being processed. Try again in a few seconds.';
+  if (payload.error === 'append_base_unavailable')
+    return 'The last successful files are unavailable. Deploy once without --append and wait for success, then append again.';
 
   if (payload.error === 'invalid_image') {
     return 'That is not an image reference. Use one like ghcr.io/you/app:1.2.3.';

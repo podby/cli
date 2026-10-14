@@ -3,7 +3,7 @@ import path from 'node:path';
 
 export type IgnorePattern = { regex: RegExp; dirs: number; exclusion: boolean };
 
-const ALWAYS_SENT = new Set(['Dockerfile', '.dockerignore']);
+const ALWAYS_SENT = new Set(['Dockerfile', '.dockerignore', 'Dockerfile.dockerignore']);
 
 // Same translation Docker's patternmatcher applies, so a context is cut exactly as `docker build` would cut it.
 function patternRegex(pattern: string): RegExp {
@@ -97,15 +97,14 @@ export function isIgnored(patterns: IgnorePattern[], relativePath: string): bool
 }
 
 async function readPatterns(root: string): Promise<IgnorePattern[]> {
-  try {
-    return parseDockerignore(await readFile(path.join(root, '.dockerignore'), 'utf8'));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return [];
+  for (const name of ['Dockerfile.dockerignore', '.dockerignore']) {
+    try {
+      return parseDockerignore(await readFile(path.join(root, name), 'utf8'));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
-
-    throw error;
   }
+  return [];
 }
 
 // `.git` never goes up, even where `docker build` would send it; `ignored` lists whole directories once where it can.
