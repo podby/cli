@@ -230,10 +230,13 @@ async function watchDeploy(input: {
       process.exit(1);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, Math.min(2000, Math.max(0, deadline - Date.now()))));
+    if (Date.now() >= deadline) continue;
 
     try {
-      const response = await api(deployStatusPath(input.kind, input.name, input.deployId));
+      const response = await api(deployStatusPath(input.kind, input.name, input.deployId), {
+        signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())),
+      });
       const payload = await readPayload<{ deploy?: { status: DeployStatus; error?: string } }>(response);
 
       if (response.status === 401 || response.status === 404) {
