@@ -5,7 +5,7 @@ import { zipDirectory } from './archive.ts';
 import { clearScreenDown, cursorTo, moveCursor } from 'node:readline';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile, mkdir, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -26,6 +26,7 @@ import {
   parseArgs,
   registryLogin,
   USAGE,
+  verificationBrowserCommand,
   usageTable,
   type DeployStatus,
   type UsagePayload,
@@ -87,6 +88,23 @@ function postJson(pathname: string, body: unknown): Promise<Response> {
   });
 }
 
+function openVerificationPage(url: URL): void {
+  const launcher = verificationBrowserCommand(url, apiOrigin());
+  if (!launcher) return;
+  try {
+    const browser = spawn(launcher.command, launcher.args, {
+      cwd: launcher.cwd,
+      env: launcher.env,
+      detached: true,
+      stdio: 'ignore',
+    });
+    browser.on('error', () => {});
+    browser.unref();
+  } catch {
+    // The printed link still works when the host cannot start a browser process.
+  }
+}
+
 async function login(): Promise<void> {
   if (!stdin.isTTY) {
     console.error('podby login needs a terminal');
@@ -105,13 +123,26 @@ async function login(): Promise<void> {
     shownLines += 1;
     const typed = (await prompts.question('Email: ')).trim().toLowerCase();
     const requested = await postJson('/api/v1/login/email', { email: typed });
-
     if (requested.ok) {
       email = typed;
+      eraseLines(shownLines);
+      console.log('We emailed you a code. It lasts 10 minutes.');
+      shownLines = 1;
       break;
     }
 
-    const payload = await readPayload(requested);
+    const payload = await readPayload<{ verificationUrl?: string }>(requested);
+    if (requested.status === 403 && payload.error === 'verification_required' && payload.verificationUrl) {
+      const url = URL.parse(payload.verificationUrl);
+      if (url && ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) {
+        email = typed;
+        eraseLines(shownLines);
+        console.log(`Open this link in a browser to receive your email code:\n${url.href}`);
+        openVerificationPage(url);
+        shownLines = 2;
+        break;
+      }
+    }
     console.error(loginFailure(payload.error, apiOrigin()));
     shownLines += 1;
 
@@ -120,10 +151,6 @@ async function login(): Promise<void> {
       process.exit(1);
     }
   }
-
-  eraseLines(shownLines);
-  console.log('We emailed you a code. It lasts 10 minutes.');
-  shownLines = 1;
 
   for (let attempt = 1; ; attempt += 1) {
     shownLines += 1;

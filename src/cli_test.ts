@@ -13,6 +13,7 @@ import {
   parseArgs,
   registryLogin,
   usageTable,
+  verificationBrowserCommand,
 } from './cli.ts';
 
 test('a missing append base explains how to recover', () => {
@@ -29,6 +30,38 @@ test('the API origin defaults to production and drops a trailing slash', () => {
 
 test('credentials live in the user config directory', () => {
   assert.equal(credentialsPath('/home/ada'), '/home/ada/.config/podby/credentials.json');
+});
+
+test('Windows opens the verification URL from the system directory or leaves it for manual opening', () => {
+  const url = new URL('https://app.podby.com/login/verify#email=test%40example.org');
+  assert.deepEqual(verificationBrowserCommand(url, url.origin, 'win32', 'D:\\Windows'), {
+    command: 'D:\\Windows\\System32\\rundll32.exe',
+    args: ['.\\url.dll,FileProtocolHandler', url.href],
+    cwd: 'D:\\Windows\\System32',
+  });
+  for (const root of ['', '.', 'C:relative', '\\\\server\\share']) {
+    assert.equal(verificationBrowserCommand(url, url.origin, 'win32', root), null);
+  }
+});
+
+test('Unix verification launchers and their helpers use system paths', () => {
+  const url = new URL('https://app.podby.com/login/verify#email=test%40example.org');
+  for (const [platform, command] of [
+    ['darwin', '/usr/bin/open'],
+    ['linux', '/usr/bin/xdg-open'],
+  ] as const) {
+    const launcher = verificationBrowserCommand(url, url.origin, platform);
+    assert.equal(launcher?.command, command);
+    assert.deepEqual(launcher.args, [url.href]);
+    assert.equal(launcher.env?.PATH, '/usr/bin:/bin:/usr/sbin:/sbin');
+  }
+});
+
+test('a verification link on the canonical hostname is manual when the CLI uses an alias', () => {
+  const url = new URL('http://127.0.0.1:3001/login/verify#email=test%40example.org');
+  for (const platform of ['darwin', 'linux', 'win32'] as const) {
+    assert.equal(verificationBrowserCommand(url, 'http://localhost:3001', platform), null);
+  }
 });
 
 test('commands are explicit', () => {

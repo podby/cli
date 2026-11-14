@@ -17,6 +17,29 @@ export function apiOrigin(env: NodeJS.ProcessEnv = process.env): string {
   return (env.PODBY_API_ORIGIN || 'https://app.podby.com').replace(/\/$/, '');
 }
 
+export function verificationBrowserCommand(
+  url: URL,
+  apiBase: string,
+  platform = process.platform,
+  systemRoot = process.env.SystemRoot,
+) {
+  if (url.origin !== new URL(apiBase).origin) return null;
+  if (platform === 'win32') {
+    if (!systemRoot || !/^[a-z]:\\/i.test(systemRoot)) {
+      return null;
+    }
+    const cwd = path.win32.join(systemRoot, 'System32');
+    return { command: path.win32.join(cwd, 'rundll32.exe'), args: ['.\\url.dll,FileProtocolHandler', url.href], cwd };
+  }
+  if (platform !== 'darwin' && platform !== 'linux') return null;
+  // xdg-open also looks up desktop helpers. Keep project binaries out of that search.
+  return {
+    command: platform === 'darwin' ? '/usr/bin/open' : '/usr/bin/xdg-open',
+    args: [url.href],
+    env: { ...process.env, PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
+  };
+}
+
 export function credentialsPath(home: string = homedir()): string {
   return path.join(home, '.config', 'podby', 'credentials.json');
 }
